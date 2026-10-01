@@ -1,23 +1,27 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
-import 'package:lanchonete/Controller/Config.Controller.dart';
 import 'package:lanchonete/Models/itens_model.dart';
 import 'package:lanchonete/Models/empresa_model.dart';
 import 'package:lanchonete/Services/EmpresaService.dart';
-import 'package:lanchonete/repositories/dataset_repository.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'PrinterServicePDF.dart';
+import 'UsbPrinterService.dart';
 
 class PrinterService {
+  static const String printerCaixaConnectionKey = 'printer_caixa_connection';
+  static const String printerCaixaNetwork = 'network';
+  static const String printerCaixaUsb = 'usb';
+  static const String printerUsbVendorIdKey = 'printer_usb_vendor_id';
+  static const String printerUsbProductIdKey = 'printer_usb_product_id';
+  static const String printerUsbPaperWidthKey = 'printer_usb_paper_width';
+  static const int printerUsbPaper58 = 58;
+  static const int printerUsbPaper80 = 80;
+
   static const int _printerPort = 9100;
   static const Duration _connectionTimeout = Duration(seconds: 4);
-
-  static final _formatMoeda =
-      NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
 
   // --- FORMATAÇÃO MANUAL ---
   static String _formatarMoedaManual(double valor) {
@@ -99,87 +103,144 @@ class PrinterService {
       required int orderNumber,
       required double totalValue,
       bool isParaLevar = false}) async {
-    final prefs = await SharedPreferences.getInstance();
-    final ipCaixa = prefs.getString('printer_ip_caixa');
-    final ipCozinha = prefs.getString('printer_ip_cozinha');
-
-    if (!kIsWeb & (ipCaixa == null || ipCaixa.isEmpty)) {
-      print("ERRO: IP da impressora do caixa não configurado.");
-      return false;
-    }
-
-    Empresa dadosEmpresa = await EmpresaService.fetchDadosEmpresa();
-    CapabilityProfile profile = await CapabilityProfile.load();
-
-    bool temPastel = itens.any((item) => item.isPastel!);
-    List<Itens> itensGeral = [];
-    List<Itens> itensPastel = [];
-
-    if (temPastel) {
-      itensPastel =
-          itens.where((item) => item.isPastel! || item.isBebida!).toList();
-      itensGeral =
-          itens.where((item) => !item.isPastel! && !item.isBebida!).toList();
-    } else {
-      itensGeral = List.from(itens);
-    }
-
-    bool sucesso = false;
-
-    // 1. IMPRESSORA CAIXA
     try {
-      late Socket socketCaixa;
-      if (!kIsWeb) {
-        socketCaixa = await Socket.connect(ipCaixa, _printerPort,
-            timeout: _connectionTimeout);
+      final prefs = await SharedPreferences.getInstance();
+      final ipCaixa = prefs.getString('printer_ip_caixa');
+      final ipCozinha = prefs.getString('printer_ip_cozinha');
+      final caixaConnection =
+          prefs.getString(printerCaixaConnectionKey) ?? printerCaixaNetwork;
+      final usbVendorId = prefs.getInt(printerUsbVendorIdKey);
+      final usbProductId = prefs.getInt(printerUsbProductIdKey);
+      final usbPaperWidth =
+          prefs.getInt(printerUsbPaperWidthKey) ?? printerUsbPaper58;
+      final useUsbCaixa = !kIsWeb &&
+          defaultTargetPlatform == TargetPlatform.android &&
+          caixaConnection == printerCaixaUsb;
+      final caixaPaperSize = useUsbCaixa && usbPaperWidth == printerUsbPaper58
+          ? PaperSize.mm58
+          : PaperSize.mm80;
+
+      if (!useUsbCaixa && !kIsWeb && (ipCaixa == null || ipCaixa.isEmpty)) {
+        print("AVISO: IP da impressora do caixa não configurado.");
+        return false;
+      }
+      if (useUsbCaixa && (usbVendorId == null || usbProductId == null)) {
+        print("AVISO: Impressora USB do caixa não configurada.");
+        return false;
       }
 
-      List<int> bytes = await _generateReceiptBytes(
-          itens, orderNumber, totalValue, profile, dadosEmpresa);
-
-      if (itensGeral.isNotEmpty) {
-        bytes.addAll(await _generateKitchenBytes(
-            itensGeral, orderNumber, profile,
-            tituloSetor: "COZINHA (GERAL)", isParaLevar: isParaLevar));
-      }
-
-      if (!kIsWeb) {
-        socketCaixa.add(Uint8List.fromList(bytes));
-        await socketCaixa.flush();
-        await socketCaixa.close();
-      } else {
-        printPdfFromBytes(Uint8List.fromList(bytes));
-      }
-      sucesso = true;
-    } catch (e) {
-      print("Erro Caixa: $e");
-    }
-
-    // 2. IMPRESSORA COZINHA
-    if (itensPastel.isNotEmpty) {
+      Empresa dadosEmpresa;
       try {
-        late Socket socketCozinha;
-        if (!kIsWeb) {
-          socketCozinha = await Socket.connect(ipCozinha, _printerPort,
+        dadosEmpresa = await EmpresaService.fetchDadosEmpresa();
+      } catch (e) {
+        print("Erro ao buscar dados da empresa: $e");
+        dadosEmpresa = Empresa();
+      }
+
+      CapabilityProfile profile;
+      try {
+        profile = await CapabilityProfile.load();
+      } catch (e) {
+        print("Erro ao carregar CapabilityProfile: $e");
+        return false;
+      }
+
+      bool temPastel = itens.any((item) => item.isPastel == true);
+      List<Itens> itensGeral = [];
+      List<Itens> itensPastel = [];
+
+      if (temPastel) {
+        itensPastel = itens
+            .where((item) => (item.isPastel == true) || (item.isBebida == true))
+            .toList();
+        itensGeral = itens
+            .where((item) => (item.isPastel != true) && (item.isBebida != true))
+            .toList();
+      } else {
+        itensGeral = List.from(itens);
+      }
+
+      bool sucesso = false;
+
+      // 1. IMPRESSORA CAIXA
+      try {
+        Socket? socketCaixa;
+        if (!kIsWeb && !useUsbCaixa) {
+          socketCaixa = await Socket.connect(ipCaixa, _printerPort,
               timeout: _connectionTimeout);
         }
 
-        List<int> bytes = await _generateKitchenBytes(
-            itensPastel, orderNumber, profile,
-            tituloSetor: "COZINHA (PASTEL)", isParaLevar: isParaLevar);
-        if (!kIsWeb) {
-          socketCozinha.add(Uint8List.fromList(bytes));
-          await socketCozinha.flush();
-          await socketCozinha.close();
+        List<int> bytes = await _generateReceiptBytes(
+            itens, orderNumber, totalValue, profile, dadosEmpresa,
+            paperSize: caixaPaperSize);
+
+        if (itensGeral.isNotEmpty) {
+          bytes.addAll(await _generateKitchenBytes(
+              itensGeral, orderNumber, profile,
+              tituloSetor: "COZINHA (GERAL)",
+              isParaLevar: isParaLevar,
+              paperSize: caixaPaperSize));
+        }
+
+        if (useUsbCaixa) {
+          await UsbPrinterService.write(
+            vendorId: usbVendorId!,
+            productId: usbProductId!,
+            bytes: bytes,
+          );
+        } else if (!kIsWeb) {
+          if (socketCaixa != null) {
+            socketCaixa.add(Uint8List.fromList(bytes));
+            await socketCaixa.flush();
+            await socketCaixa.close();
+          }
         } else {
           printPdfFromBytes(Uint8List.fromList(bytes));
         }
+        sucesso = true;
       } catch (e) {
-        print("Erro Cozinha: $e");
+        print("Erro Caixa: $e");
       }
-    }
 
-    return sucesso;
+      // 2. IMPRESSORA COZINHA
+      if (itensPastel.isNotEmpty) {
+        try {
+          Socket? socketCozinha;
+          if (!kIsWeb && !useUsbCaixa) {
+            socketCozinha = await Socket.connect(ipCozinha, _printerPort,
+                timeout: _connectionTimeout);
+          }
+
+          List<int> bytes = await _generateKitchenBytes(
+              itensPastel, orderNumber, profile,
+              tituloSetor: "COZINHA (PASTEL)",
+              isParaLevar: isParaLevar,
+              paperSize: caixaPaperSize);
+          if (useUsbCaixa) {
+            await UsbPrinterService.write(
+              vendorId: usbVendorId!,
+              productId: usbProductId!,
+              bytes: bytes,
+            );
+          } else if (!kIsWeb) {
+            if (socketCozinha != null) {
+              socketCozinha.add(Uint8List.fromList(bytes));
+              await socketCozinha.flush();
+              await socketCozinha.close();
+            }
+          } else {
+            printPdfFromBytes(Uint8List.fromList(bytes));
+          }
+        } catch (e) {
+          print("Erro Cozinha: $e");
+        }
+      }
+
+      return sucesso;
+    } catch (e, stack) {
+      print("Erro defensivo em printOrder: $e\n$stack");
+      return false;
+    }
   }
 
   // --- GERADOR CUPOM CLIENTE ---
@@ -188,8 +249,9 @@ class PrinterService {
       int orderNumber,
       double totalValue,
       CapabilityProfile profile,
-      Empresa empresa) async {
-    final generator = Generator(PaperSize.mm80, profile);
+      Empresa empresa,
+      {PaperSize paperSize = PaperSize.mm80}) async {
+    final generator = Generator(paperSize, profile);
     List<int> bytes = [];
     bytes += generator.reset();
 
@@ -241,7 +303,8 @@ class PrinterService {
         for (var op in item.opcoesNiveis!)
           valorTotalItem += (op.valorAdicional * op.quantidade);
       }
-      double totalLinha = valorTotalItem * qtd;
+      double totalLinha = (valorTotalItem * qtd) - (item.desconto ?? 0.0);
+      if (totalLinha < 0) totalLinha = 0;
 
       String nomeItem = _semAcentos(item.nome ?? '');
 
@@ -266,6 +329,12 @@ class PrinterService {
       for (var extra in extras) {
         bytes += generator.text(
             " + ${extra['qtd']}x ${_semAcentos(extra['nome'])}",
+            styles: const PosStyles(fontType: PosFontType.fontB));
+      }
+
+      if ((item.desconto ?? 0) > 0) {
+        bytes += generator.text(
+            " - DESCONTO ${_formatarMoedaManual(item.desconto ?? 0)}",
             styles: const PosStyles(fontType: PosFontType.fontB));
       }
     }
@@ -300,8 +369,10 @@ class PrinterService {
   // --- VIA COZINHA ---
   static Future<List<int>> _generateKitchenBytes(
       List<Itens> itens, int orderNumber, CapabilityProfile profile,
-      {String tituloSetor = "COZINHA", bool isParaLevar = false}) async {
-    final generator = Generator(PaperSize.mm80, profile);
+      {String tituloSetor = "COZINHA",
+      bool isParaLevar = false,
+      PaperSize paperSize = PaperSize.mm80}) async {
+    final generator = Generator(paperSize, profile);
     List<int> bytes = [];
     bytes += generator.reset();
     //espaços em branco

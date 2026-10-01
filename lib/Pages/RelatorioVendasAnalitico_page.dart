@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:lanchonete/Controller/Config.Controller.dart';
+import 'package:lanchonete/Controller/usuario_controller.dart';
 import 'package:lanchonete/Models/venda_analitico_model.dart';
 import 'package:lanchonete/Services/RelatorioService.dart';
+import 'package:provider/provider.dart';
 
 class RelatorioVendasAnaliticoPage extends StatefulWidget {
   @override
@@ -19,6 +22,7 @@ class _RelatorioVendasAnaliticoPageState
   DateTime dataInicio = DateTime.now();
   DateTime dataFim = DateTime.now();
   bool carregando = false;
+  bool verTodosCaixas = false;
   String erro = '';
   VendaAnaliticoResponse? relatorio;
 
@@ -32,6 +36,18 @@ class _RelatorioVendasAnaliticoPageState
   }
 
   Future<void> carregar() async {
+    final usuarioController =
+        Provider.of<UsuarioController>(context, listen: false);
+    final bool isAdmin = usuarioController.isAdmin;
+    final int pdvAtual = ConfigController.instance.pdv.value;
+
+    if (!isAdmin) {
+      verTodosCaixas = false;
+      final hoje = DateTime.now();
+      dataInicio = DateTime(hoje.year, hoje.month, hoje.day);
+      dataFim = DateTime(hoje.year, hoje.month, hoje.day, 23, 59, 59);
+    }
+
     setState(() {
       carregando = true;
       erro = '';
@@ -41,6 +57,8 @@ class _RelatorioVendasAnaliticoPageState
       final resultado = await service.fetchVendasAnalitico(
         dataInicio: dataInicio,
         dataFim: dataFim,
+        pdv: pdvAtual,
+        todosCaixas: isAdmin ? verTodosCaixas : false,
       );
       setState(() {
         relatorio = resultado;
@@ -57,12 +75,18 @@ class _RelatorioVendasAnaliticoPageState
   }
 
   Future<void> selecionarData(bool inicio) async {
+    final usuarioController =
+        Provider.of<UsuarioController>(context, listen: false);
+    if (!usuarioController.isAdmin) {
+      return;
+    }
+
     final atual = inicio ? dataInicio : dataFim;
     final selecionada = await showDatePicker(
       context: context,
       initialDate: atual,
       firstDate: DateTime(2020),
-      lastDate: DateTime.now().add(Duration(days: 365)),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
     );
 
     if (selecionada == null) {
@@ -80,49 +104,190 @@ class _RelatorioVendasAnaliticoPageState
 
   @override
   Widget build(BuildContext context) {
+    final usuarioController = Provider.of<UsuarioController>(context);
+    final bool isAdmin = usuarioController.isAdmin;
+
     return Column(
       children: [
-        _filtros(),
-        if (carregando) LinearProgressIndicator(),
+        _filtros(isAdmin),
+        if (carregando) const LinearProgressIndicator(),
         if (erro.isNotEmpty) _erro(),
         Expanded(
           child: relatorio == null
-              ? Center(child: Text('Nenhum dado carregado'))
+              ? const Center(child: Text('Nenhum dado carregado'))
               : _conteudo(relatorio!),
         ),
       ],
     );
   }
 
-  Widget _filtros() {
+  Widget _filtros(bool isAdmin) {
+    final int pdvAtual = ConfigController.instance.pdv.value;
+
     return Padding(
-      padding: EdgeInsets.all(12),
-      child: Row(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: OutlinedButton.icon(
-              icon: Icon(Icons.date_range),
-              label: Text(dateFormat.format(dataInicio)),
-              onPressed: () => selecionarData(true),
+          if (isAdmin)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    ChoiceChip(
+                      avatar: Icon(
+                        Icons.point_of_sale,
+                        size: 18,
+                        color: !verTodosCaixas ? Colors.black87 : Colors.grey[600],
+                      ),
+                      label: Text(
+                        'Último Caixa (PDV $pdvAtual)',
+                        style: TextStyle(
+                          fontWeight: !verTodosCaixas ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                      selected: !verTodosCaixas,
+                      onSelected: (selected) {
+                        if (selected && verTodosCaixas) {
+                          setState(() => verTodosCaixas = false);
+                          carregar();
+                        }
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    ChoiceChip(
+                      avatar: Icon(
+                        Icons.all_inclusive,
+                        size: 18,
+                        color: verTodosCaixas ? Colors.black87 : Colors.grey[600],
+                      ),
+                      label: Text(
+                        'Todos os Caixas (Geral)',
+                        style: TextStyle(
+                          fontWeight: verTodosCaixas ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                      selected: verTodosCaixas,
+                      onSelected: (selected) {
+                        if (selected && !verTodosCaixas) {
+                          setState(() => verTodosCaixas = true);
+                          carregar();
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  Icon(Icons.lock_outline, size: 16, color: Colors.grey[700]),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Visualizando vendas do caixa atual deste PDV ($pdvAtual)',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[800],
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
             ),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  icon: Icon(
+                    isAdmin ? Icons.date_range : Icons.lock_outline,
+                    color: isAdmin ? null : Colors.grey,
+                  ),
+                  label: Text(
+                    dateFormat.format(dataInicio),
+                    style: TextStyle(
+                      color: isAdmin ? null : Colors.grey[700],
+                    ),
+                  ),
+                  onPressed: isAdmin ? () => selecionarData(true) : null,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  icon: Icon(
+                    isAdmin ? Icons.event : Icons.lock_outline,
+                    color: isAdmin ? null : Colors.grey,
+                  ),
+                  label: Text(
+                    dateFormat.format(dataFim),
+                    style: TextStyle(
+                      color: isAdmin ? null : Colors.grey[700],
+                    ),
+                  ),
+                  onPressed: isAdmin ? () => selecionarData(false) : null,
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                height: 48,
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.search),
+                  label: const Text('Buscar'),
+                  onPressed: carregando ? null : carregar,
+                ),
+              ),
+            ],
           ),
-          SizedBox(width: 8),
-          Expanded(
-            child: OutlinedButton.icon(
-              icon: Icon(Icons.event),
-              label: Text(dateFormat.format(dataFim)),
-              onPressed: () => selecionarData(false),
+          if (relatorio != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: relatorio!.modoTodosCaixas
+                      ? Colors.blue.shade50
+                      : Colors.green.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: relatorio!.modoTodosCaixas
+                        ? Colors.blue.shade200
+                        : Colors.green.shade200,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      relatorio!.modoTodosCaixas
+                          ? Icons.public
+                          : Icons.check_circle_outline,
+                      size: 16,
+                      color: relatorio!.modoTodosCaixas
+                          ? Colors.blue.shade700
+                          : Colors.green.shade800,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      relatorio!.modoTodosCaixas
+                          ? 'Modo Geral: Visualizando todos os caixas'
+                          : 'Vendas do Caixa nº ${relatorio?.caixaAtual ?? '-'} (PDV ${relatorio?.pdv ?? pdvAtual})',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: relatorio!.modoTodosCaixas
+                            ? Colors.blue.shade900
+                            : Colors.green.shade900,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ),
-          SizedBox(width: 8),
-          SizedBox(
-            height: 48,
-            child: ElevatedButton.icon(
-              icon: Icon(Icons.search),
-              label: Text('Buscar'),
-              onPressed: carregando ? null : carregar,
-            ),
-          ),
         ],
       ),
     );

@@ -3,16 +3,29 @@ class VendaAnaliticoResponse {
   final TotaisVendaAnalitico totais;
   final List<VendaAnalitico> vendas;
   final List<ResumoPagamento> resumoPagamentos;
+  final int? caixaAtual;
+  final int? pdv;
+  final bool modoTodosCaixas;
 
   VendaAnaliticoResponse({
     required this.periodo,
     required this.totais,
     required this.vendas,
     required this.resumoPagamentos,
+    this.caixaAtual,
+    this.pdv,
+    this.modoTodosCaixas = false,
   });
 
   factory VendaAnaliticoResponse.fromJson(Map<String, dynamic> json) {
     final data = json['data'] as Map<String, dynamic>? ?? json;
+    final int? cai = _toIntOrNull(data['caixa_atual']) ?? _toIntOrNull(data['periodo']?['caixa']);
+    final int? p = _toIntOrNull(data['pdv']) ?? _toIntOrNull(data['periodo']?['pdv']);
+    final bool todos = data['modo_todos_caixas'] == true ||
+        data['modo_todos_caixas']?.toString() == 'true' ||
+        data['periodo']?['todos_caixas'] == true ||
+        data['periodo']?['todos_caixas']?.toString() == 'true';
+
     return VendaAnaliticoResponse(
       periodo: PeriodoRelatorio.fromJson(data['periodo'] ?? {}),
       totais: TotaisVendaAnalitico.fromJson(data['totais'] ?? {}),
@@ -22,6 +35,9 @@ class VendaAnaliticoResponse {
       resumoPagamentos: ((data['resumo_pagamentos'] as List?) ?? [])
           .map((item) => ResumoPagamento.fromJson(item))
           .toList(),
+      caixaAtual: cai,
+      pdv: p,
+      modoTodosCaixas: todos,
     );
   }
 }
@@ -32,6 +48,9 @@ class PeriodoRelatorio {
   final int cliente;
   final int grupo;
   final String tipoPedido;
+  final int pdv;
+  final int caixa;
+  final bool todosCaixas;
 
   PeriodoRelatorio({
     required this.dataInicio,
@@ -39,6 +58,9 @@ class PeriodoRelatorio {
     required this.cliente,
     required this.grupo,
     required this.tipoPedido,
+    this.pdv = 0,
+    this.caixa = 0,
+    this.todosCaixas = false,
   });
 
   factory PeriodoRelatorio.fromJson(Map<String, dynamic> json) {
@@ -48,6 +70,9 @@ class PeriodoRelatorio {
       cliente: _toInt(json['cliente']),
       grupo: _toInt(json['grupo']),
       tipoPedido: json['tipo_pedido']?.toString() ?? '',
+      pdv: _toInt(json['pdv']),
+      caixa: _toInt(json['caixa']),
+      todosCaixas: json['todos_caixas'] == true || json['todos_caixas']?.toString() == 'true',
     );
   }
 }
@@ -259,4 +284,10 @@ int _toInt(dynamic value) {
     return value.toInt();
   }
   return int.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+int? _toIntOrNull(dynamic value) {
+  if (value == null) return null;
+  if (value is num) return value.toInt();
+  return int.tryParse(value.toString());
 }

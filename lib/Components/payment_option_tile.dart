@@ -75,29 +75,32 @@ class PaymentOptionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final orientation = MediaQuery.of(context).orientation;
-    final isHorizontal = orientation == Orientation.landscape;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isHorizontal = constraints.maxWidth < 170;
 
-    return Card(
-      elevation: 1, // Sombra mais leve
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          padding: const EdgeInsets.all(8), // Padding externo menor
-          decoration: BoxDecoration(
+        return Card(
+          elevation: 1, // Sombra mais leve
+          shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: color.withOpacity(0.3),
-              width: 1,
+          ),
+          child: InkWell(
+            onTap: onPressed,
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              padding: const EdgeInsets.all(8), // Padding externo menor
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: color.withOpacity(0.3),
+                  width: 1,
+                ),
+              ),
+              child: _buildOptions(isHorizontal),
             ),
           ),
-          child: _buildOptions(isHorizontal),
-        ),
-      ),
+        );
+      },
     );
   }
 }

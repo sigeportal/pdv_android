@@ -468,7 +468,10 @@ class _CategoriaPageState extends State<CategoriaPage> {
     );
   }
 
-  Widget _buildCatalogoAreaSemCategoria() {
+  Widget _buildCatalogoAreaSemCategoria({
+    required bool isMobile,
+    required bool isTablet,
+  }) {
     if (_erroMensagem != null) {
       return Center(
         child: Column(
@@ -488,7 +491,7 @@ class _CategoriaPageState extends State<CategoriaPage> {
 
     return Container(
       color: const Color(0xFFF5F5F7),
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 16),
       child: _isLoadingProdutos
           ? Center(child: CircularProgressIndicator(color: Colors.amber[700]))
           : _produtos.isEmpty
@@ -499,14 +502,24 @@ class _CategoriaPageState extends State<CategoriaPage> {
                   radius: const Radius.circular(8),
                   child: GridView.builder(
                     controller: _produtosScrollController,
-                    padding: const EdgeInsets.only(
-                        bottom: 40, top: 10, left: 4, right: 4),
-                    gridDelegate:
-                        const SliverGridDelegateWithMaxCrossAxisExtent(
-                      maxCrossAxisExtent: 190,
-                      childAspectRatio: 0.75,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
+                    padding: EdgeInsets.only(
+                        bottom: isMobile ? 96 : 40,
+                        top: isMobile ? 6 : 10,
+                        left: 4,
+                        right: 4),
+                    gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                      maxCrossAxisExtent: isMobile
+                          ? 165
+                          : isTablet
+                              ? 175
+                              : 190,
+                      childAspectRatio: isMobile
+                          ? 0.82
+                          : isTablet
+                              ? 0.78
+                              : 0.75,
+                      crossAxisSpacing: isMobile ? 8 : 12,
+                      mainAxisSpacing: isMobile ? 8 : 12,
                     ),
                     itemCount: _produtos.length,
                     itemBuilder: (context, index) {
@@ -681,7 +694,10 @@ class _CategoriaPageState extends State<CategoriaPage> {
     );
   }
 
-  Widget _buildComandaSidebar() {
+  Widget _buildComandaSidebar({
+    bool fillWidth = false,
+    double width = 360,
+  }) {
     return Consumer<ComandaController>(
       builder: (context, controller, _) {
         double totalItens = controller.itens
@@ -690,8 +706,15 @@ class _CategoriaPageState extends State<CategoriaPage> {
         bool usarMesas = ConfigController.instance.useTables.value;
         bool mesaOcupada = widget.estadoMesa == 'O';
 
+        void executarAcao(VoidCallback acao) {
+          if (fillWidth) {
+            Navigator.of(context).pop();
+          }
+          acao();
+        }
+
         return Container(
-          width: 360,
+          width: fillWidth ? double.infinity : width,
           decoration: BoxDecoration(
             color: Colors.white,
             boxShadow: [
@@ -794,7 +817,8 @@ class _CategoriaPageState extends State<CategoriaPage> {
                                     onPressed: (controller.isEmpty ||
                                             _isEnviandoPedido)
                                         ? null
-                                        : () => _realizarPedido(controller),
+                                        : () => executarAcao(
+                                            () => _realizarPedido(controller)),
                                     icon: _isEnviandoPedido
                                         ? const SizedBox(
                                             width: 16,
@@ -826,7 +850,8 @@ class _CategoriaPageState extends State<CategoriaPage> {
                                                   BorderRadius.circular(8))),
                                       onPressed: controller.isEmpty
                                           ? null
-                                          : () => _irParaPagamento(controller),
+                                          : () => executarAcao(() =>
+                                              _irParaPagamento(controller)),
                                       icon: const Icon(Icons.monetization_on,
                                           size: 18),
                                       label: const Text("PAGAR",
@@ -851,7 +876,8 @@ class _CategoriaPageState extends State<CategoriaPage> {
                                                 BorderRadius.circular(8))),
                                     onPressed: controller.isEmpty
                                         ? null
-                                        : () => _irParaPagamento(controller),
+                                        : () => executarAcao(
+                                            () => _irParaPagamento(controller)),
                                     icon: const Icon(Icons.monetization_on,
                                         size: 18),
                                     label: const Text("IR PARA PAGAMENTO",
@@ -876,13 +902,59 @@ class _CategoriaPageState extends State<CategoriaPage> {
     );
   }
 
+  void _abrirCarrinhoMobile() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => SafeArea(
+        top: false,
+        child: SizedBox(
+          height: MediaQuery.of(context).size.height * 0.88,
+          child: ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+            child: _buildComandaSidebar(fillWidth: true),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCarrinhoFloatingButton() {
+    return Consumer<ComandaController>(
+      builder: (context, controller, _) {
+        final totalItens = controller.itens
+            .fold<double>(0, (sum, item) => sum + (item.quantidade ?? 0));
+
+        return FloatingActionButton.extended(
+          onPressed: _abrirCarrinhoMobile,
+          backgroundColor: Colors.amber[700],
+          foregroundColor: Colors.white,
+          icon: const Icon(Icons.shopping_cart_rounded),
+          label: Text(
+            totalItens > 0
+                ? "${totalItens % 1 == 0 ? totalItens.toInt() : totalItens.toStringAsFixed(1)} | ${_formatMoeda.format(controller.valorComanda)}"
+                : "Carrinho",
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     bool isMesaOcupada = widget.estadoMesa == 'O';
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final largura = constraints.maxWidth;
+        final isMobile = largura < 700;
+        final isTablet = largura >= 700 && largura < 1050;
+        final sidebarWidth = isTablet ? 320.0 : 360.0;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F7),
-      appBar: AppBar(
+        return Scaffold(
+          backgroundColor: const Color(0xFFF5F5F7),
+          appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 1,
         leading: widget.mesaId != null
@@ -921,58 +993,90 @@ class _CategoriaPageState extends State<CategoriaPage> {
         centerTitle: true,
         actions: [
           if (isMesaOcupada)
-            Padding(
-              padding: const EdgeInsets.only(right: 8.0),
-              child: TextButton.icon(
-                icon: _isConsultandoComanda
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.receipt_long, color: Colors.blueAccent),
-                label: const Text("Consultar Comanda",
-                    style: TextStyle(
-                        color: Colors.blueAccent, fontWeight: FontWeight.bold)),
-                onPressed:
-                    _isConsultandoComanda ? null : _consultarComandaDaMesa,
-              ),
-            ),
+            isMobile
+                ? IconButton(
+                    tooltip: "Consultar Comanda",
+                    icon: _isConsultandoComanda
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.receipt_long,
+                            color: Colors.blueAccent),
+                    onPressed:
+                        _isConsultandoComanda ? null : _consultarComandaDaMesa,
+                  )
+                : Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: TextButton.icon(
+                      icon: _isConsultandoComanda
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.receipt_long,
+                              color: Colors.blueAccent),
+                      label: const Text("Consultar Comanda",
+                          style: TextStyle(
+                              color: Colors.blueAccent,
+                              fontWeight: FontWeight.bold)),
+                      onPressed: _isConsultandoComanda
+                          ? null
+                          : _consultarComandaDaMesa,
+                    ),
+                  ),
           IconButton(
               icon: const Icon(Icons.refresh, color: Colors.grey),
               onPressed: _carregarDadosIniciais),
         ],
-      ),
-      body: Column(
-        children: [
-          Container(
-            height: 65,
-            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-            color: const Color(0xFFF5F5F7),
-            child: _isLoadingCategorias
-                ? const Center(child: CircularProgressIndicator())
-                : ScrollConfiguration(
-                    behavior: ScrollConfiguration.of(context)
-                        .copyWith(scrollbars: false),
-                    child: ListView.builder(
-                      controller: _categoriasScrollController,
-                      scrollDirection: Axis.horizontal,
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      itemCount: _categorias.length,
-                      itemBuilder: (context, index) =>
-                          _buildCategoriaTab(_categorias[index]),
-                    ),
-                  ),
           ),
-          Expanded(
-            child: Row(
-              children: [
-                Expanded(child: _buildCatalogoAreaSemCategoria()),
-                _buildComandaSidebar(),
-              ],
-            ),
+          floatingActionButton:
+              isMobile ? _buildCarrinhoFloatingButton() : null,
+          body: Column(
+            children: [
+              Container(
+                height: isMobile ? 56 : 65,
+                padding: EdgeInsets.symmetric(
+                    vertical: isMobile ? 8 : 10,
+                    horizontal: isMobile ? 8 : 16),
+                color: const Color(0xFFF5F5F7),
+                child: _isLoadingCategorias
+                    ? const Center(child: CircularProgressIndicator())
+                    : ScrollConfiguration(
+                        behavior: ScrollConfiguration.of(context)
+                            .copyWith(scrollbars: false),
+                        child: ListView.builder(
+                          controller: _categoriasScrollController,
+                          scrollDirection: Axis.horizontal,
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          itemCount: _categorias.length,
+                          itemBuilder: (context, index) =>
+                              _buildCategoriaTab(_categorias[index]),
+                        ),
+                      ),
+              ),
+              Expanded(
+                child: isMobile
+                    ? _buildCatalogoAreaSemCategoria(
+                        isMobile: isMobile,
+                        isTablet: isTablet,
+                      )
+                    : Row(
+                        children: [
+                          Expanded(
+                            child: _buildCatalogoAreaSemCategoria(
+                              isMobile: isMobile,
+                              isTablet: isTablet,
+                            ),
+                          ),
+                          _buildComandaSidebar(width: sidebarWidth),
+                        ],
+                      ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

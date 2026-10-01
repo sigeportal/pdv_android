@@ -5,6 +5,7 @@ import 'package:lanchonete/Models/comanda_model.dart';
 import 'package:lanchonete/Models/itens_model.dart';
 import 'package:lanchonete/Pages/Categoria_page.dart';
 import 'package:lanchonete/Pages/Tela_carregamento_page.dart';
+import 'package:lanchonete/Services/ComandaService.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -174,9 +175,21 @@ class _DetalheComandaPageState extends State<DetalheComandaPage> {
                 MaterialPageRoute(builder: (_) {
                   return TelaCarregamento(
                     messageAwait: 'Aguarde o encerramento...',
-                    messageSuccess: 'Encerramento realizado com sucesso...',
+                    messageSuccess: 'Encerramento realizado com sucesso!',
                     messageError: 'Erro ao tentar realizar o fechamento!',
                     finalization: true,
+                    onFinalization: () async {
+                      final cService = ComandaService();
+                      if (comanda.codigo != null && comanda.codigo! > 0) {
+                        String dataStr =
+                            DateFormat('yyyy-MM-dd').format(DateTime.now());
+                        String horaStr =
+                            DateFormat('HH:mm:ss').format(DateTime.now());
+                        await cService.fecharComanda(
+                            comanda.codigo!, dataStr, horaStr);
+                      }
+                      await cService.encerrarComanda(widget.numeroMesa);
+                    },
                   );
                 }),
               );

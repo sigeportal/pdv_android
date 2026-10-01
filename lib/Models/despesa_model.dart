@@ -42,10 +42,7 @@ class DespesaLancamento {
   });
 
   Map<String, dynamic> toJson() {
-    final dataFormatada =
-        '${data.year.toString().padLeft(4, '0')}-'
-        '${data.month.toString().padLeft(2, '0')}-'
-        '${data.day.toString().padLeft(2, '0')}';
+    final dataFormatada = _toYmd(data);
 
     return {
       'SubDespesa': subDespesa,
@@ -59,5 +56,11 @@ class DespesaLancamento {
       'Conta': conta,
       'TipoPagamento': tipoPagamento,
     };
+  }
+
+  static String _toYmd(DateTime date) {
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    return '${date.year}-$month-$day';
   }
 }

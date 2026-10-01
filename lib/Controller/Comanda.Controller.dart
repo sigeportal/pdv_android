@@ -11,34 +11,43 @@ import 'package:flutter/cupertino.dart';
 class ComandaController extends ChangeNotifier {
   List<Itens> itens = [];
 
+  double valorBrutoItem(Itens item) {
+    double valorItemBase = (item.valor ?? 0.0).toDouble();
+    double valorAdicionais = 0.0;
+
+    if (item.complementos != null && item.complementos!.isNotEmpty) {
+      for (var comp in item.complementos!) {
+        double valComp = (comp.valor ?? 0).toDouble();
+        double qtdComp = (comp.quantidade ?? 1).toDouble();
+        valorAdicionais += (valComp * qtdComp);
+      }
+    }
+
+    if (item.opcoesNiveis != null && item.opcoesNiveis!.isNotEmpty) {
+      for (var op in item.opcoesNiveis!) {
+        double valOp = (op.valorAdicional).toDouble();
+        double qtdOp = (op.quantidade).toDouble();
+        valorAdicionais += (valOp * qtdOp);
+      }
+    }
+
+    double quantidadeItem = (item.quantidade ?? 1.0).toDouble();
+    if (quantidadeItem == 0) quantidadeItem = 1.0;
+
+    return (valorItemBase + valorAdicionais) * quantidadeItem;
+  }
+
+  double valorLiquidoItem(Itens item) {
+    final bruto = valorBrutoItem(item);
+    final desconto = (item.desconto ?? 0.0).clamp(0.0, bruto).toDouble();
+    return bruto - desconto;
+  }
+
   double get valorComanda {
     double somaTotal = 0.0;
 
     for (var item in itens) {
-      double valorItemBase = (item.valor ?? 0.0).toDouble();
-      double valorAdicionais = 0.0;
-
-      if (item.complementos != null && item.complementos!.isNotEmpty) {
-        for (var comp in item.complementos!) {
-          double valComp = (comp.valor).toDouble();
-          double qtdComp = (comp.quantidade ?? 1).toDouble();
-          valorAdicionais += (valComp * qtdComp);
-        }
-      }
-
-      if (item.opcoesNiveis != null && item.opcoesNiveis!.isNotEmpty) {
-        for (var op in item.opcoesNiveis!) {
-          double valOp = (op.valorAdicional).toDouble();
-          double qtdOp = (op.quantidade ?? 1).toDouble();
-          valorAdicionais += (valOp * qtdOp);
-        }
-      }
-
-      double quantidadeItem = (item.quantidade ?? 1.0).toDouble();
-      if (quantidadeItem == 0) quantidadeItem = 1.0;
-
-      double valorUnitarioCheio = valorItemBase + valorAdicionais;
-      somaTotal += (valorUnitarioCheio * quantidadeItem);
+      somaTotal += valorLiquidoItem(item);
     }
 
     return somaTotal;
@@ -66,6 +75,7 @@ class ComandaController extends ChangeNotifier {
   void adicionaItem(Produtos produto, String idAgrupamento,
       {GradeProduto? gradeProduto,
       double quantidade = 1.0,
+      double? valorVenda,
       required int usuario}) {
     itens.add(
       Itens(
@@ -73,7 +83,8 @@ class ComandaController extends ChangeNotifier {
         codigo: DateTime.now().millisecondsSinceEpoch,
         produto: produto.codigo,
         quantidade: quantidade,
-        valor: produto.valor,
+        valor: valorVenda ?? produto.valor,
+        desconto: 0.0,
         nome: produto.nome,
         grade: produto.grade,
         codGrupo: produto.grupo,
@@ -88,6 +99,15 @@ class ComandaController extends ChangeNotifier {
     );
 
     notifyListeners();
+  }
+
+  void alteraDescontoItem(int? codItem, double desconto) {
+    var indice = itens.indexWhere((element) => element.codigo == codItem);
+    if (indice != -1) {
+      final bruto = valorBrutoItem(itens[indice]);
+      itens[indice].desconto = desconto.clamp(0.0, bruto).toDouble();
+      notifyListeners();
+    }
   }
 
   void clear() {

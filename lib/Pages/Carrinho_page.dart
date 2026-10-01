@@ -148,6 +148,24 @@ class _CarrinhoPageState extends State<CarrinhoPage> {
           : SizedBox();
     }
 
+    _buildDesconto(Itens item) {
+      final desconto = item.desconto ?? 0.0;
+      return desconto > 0
+          ? ListTile(
+              dense: true,
+              title: Text(
+                'Desconto:',
+                textAlign: TextAlign.end,
+                style: TextStyle(fontSize: 14),
+              ),
+              trailing: Text(
+                '- ${f.format(desconto)}',
+                style: TextStyle(fontSize: 14, color: Colors.red[700]),
+              ),
+            )
+          : SizedBox();
+    }
+
     _buildTotal(Itens item) {
       double totalComplementos = 0;
 
@@ -155,12 +173,17 @@ class _CarrinhoPageState extends State<CarrinhoPage> {
         totalComplementos += item.valor * item.quantidade;
       }
 
+      final quantidade = item.quantidade ?? 1.0;
+      final bruto = ((item.valor ?? 0.0) + totalComplementos) * quantidade;
+      final desconto = item.desconto ?? 0.0;
+      final liquido = (bruto - desconto).clamp(0.0, double.infinity);
+
       return ListTile(
         title: Text(
           'Total: ',
           textAlign: TextAlign.end,
         ),
-        trailing: Text(f.format(item.valor! + totalComplementos)),
+        trailing: Text(f.format(liquido)),
       );
     }
 
@@ -171,7 +194,10 @@ class _CarrinhoPageState extends State<CarrinhoPage> {
         children: [
           ItemListaWidget(item: item, onDelete: _confirmarExclusao),
           _buildComplementos(item),
-          item.complementos!.length > 0 ? _buildTotal(item) : SizedBox(),
+          _buildDesconto(item),
+          item.complementos!.length > 0 || (item.desconto ?? 0) > 0
+              ? _buildTotal(item)
+              : SizedBox(),
           Row(
             children: [
               Expanded(child: _buildObservacao(item)),

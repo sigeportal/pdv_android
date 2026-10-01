@@ -16,6 +16,12 @@ class ItemListaWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final quantidade = item.quantidade ?? 1;
+    final valorBase = item.valor ?? 0;
+    final valorBruto = quantidade * valorBase;
+    final desconto = item.desconto ?? 0;
+    final valorLiquido = (valorBruto - desconto).clamp(0.0, double.infinity);
+
     return ListTile(
       leading: item.grade! > 0
           ? Column(
@@ -38,7 +44,7 @@ class ItemListaWidget extends StatelessWidget {
       subtitle: Text(
         item.grade! > 0
             ? '${item.quantidade} x ${f.format(item.gradeProduto!.valor)} = ${f.format(item.valor)}'
-            : '${item.quantidade} x ${f.format(item.valor)} = ${f.format(item.quantidade! * item.valor!)}',
+            : '${item.quantidade} x ${f.format(item.valor)} = ${f.format(valorLiquido)}',
         style: TextStyle(fontSize: 16),
       ),
       trailing: Column(
@@ -59,7 +65,7 @@ class ItemListaWidget extends StatelessWidget {
           Expanded(
             flex: 1,
             child: Text(
-              f.format(item.valor),
+              f.format(valorLiquido),
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
           ),

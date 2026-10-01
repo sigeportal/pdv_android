@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
+import 'package:lanchonete/Controller/Config.Controller.dart';
+import 'package:lanchonete/Pages/Principal_page.dart';
 
 class TelaCarregamento extends StatefulWidget {
   final String messageAwait;
@@ -7,6 +8,7 @@ class TelaCarregamento extends StatefulWidget {
   final String messageError;
   final bool finalization;
   final Future<dynamic> Function()? onFinalization;
+  final void Function(BuildContext context)? onSuccess;
 
   const TelaCarregamento({
     Key? key,
@@ -15,6 +17,7 @@ class TelaCarregamento extends StatefulWidget {
     required this.messageError,
     required this.finalization,
     this.onFinalization,
+    this.onSuccess,
   }) : super(key: key);
 
   @override
@@ -23,9 +26,10 @@ class TelaCarregamento extends StatefulWidget {
 
 class _TelaCarregamentoState extends State<TelaCarregamento>
     with SingleTickerProviderStateMixin {
-  bool isLoading = false;
-  bool isSuccess = true;
+  bool isLoading = true;
+  bool isSuccess = false;
   late AnimationController _animationController;
+  bool _navigationStarted = false;
 
   @override
   void initState() {
@@ -34,13 +38,18 @@ class _TelaCarregamentoState extends State<TelaCarregamento>
 
     // Inicializar animação para loading
     _animationController = AnimationController(
-      duration: Duration(seconds: 2),
+      duration: const Duration(seconds: 2),
       vsync: this,
     )..repeat();
 
     // Se for finalization, executar o callback
     if (widget.finalization && widget.onFinalization != null) {
       _executarFinalizacao();
+    } else if (!widget.finalization) {
+      Future.delayed(const Duration(seconds: 2), () {
+        if (!mounted) return;
+        _finalizarComSucesso();
+      });
     }
   }
 
@@ -50,26 +59,66 @@ class _TelaCarregamentoState extends State<TelaCarregamento>
     super.dispose();
   }
 
+  void _finalizarComSucesso() {
+    if (!mounted) return;
+    _animationController.reset();
+    _animationController.forward();
+
+    setState(() {
+      isSuccess = true;
+      isLoading = false;
+    });
+
+    _agendarNavegacao(sucesso: true);
+  }
+
+  void _finalizarComErro() {
+    if (!mounted) return;
+    _animationController.stop();
+
+    setState(() {
+      isSuccess = false;
+      isLoading = false;
+    });
+
+    _agendarNavegacao(sucesso: false);
+  }
+
+  void _agendarNavegacao({required bool sucesso}) {
+    if (_navigationStarted) return;
+    _navigationStarted = true;
+
+    final duration = Duration(milliseconds: sucesso ? 1500 : 2500);
+    Future.delayed(duration, () {
+      if (!mounted) return;
+      if (sucesso && widget.onSuccess != null) {
+        widget.onSuccess!(context);
+      } else {
+        _navegarPadrao();
+      }
+    });
+  }
+
+  void _navegarPadrao() {
+    if (!mounted) return;
+    bool usarMesas = ConfigController.instance.useTables.value;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => PrincipalPage(
+          paginas: usarMesas ? Paginas.mesas : Paginas.categorias,
+        ),
+      ),
+      (route) => false,
+    );
+  }
+
   Future<void> _executarFinalizacao() async {
     try {
       await widget.onFinalization!();
-
-      // Reiniciar animação para efeito de sucesso
-      _animationController.reset();
-      _animationController.forward();
-
-      // Após sucesso, definir isSuccess como true e parar o carregamento
-      setState(() {
-        isSuccess = true;
-        isLoading = false;
-      });
-    } catch (e) {
-      // Em caso de erro, definir isSuccess como false
-      _animationController.stop();
-      setState(() {
-        isSuccess = false;
-        isLoading = false;
-      });
+      _finalizarComSucesso();
+    } catch (e, stack) {
+      print("Erro capturado em TelaCarregamento: $e\n$stack");
+      _finalizarComErro();
     }
   }
 
@@ -195,23 +244,6 @@ class _TelaCarregamentoState extends State<TelaCarregamento>
 
   @override
   Widget build(BuildContext context) {
-    // Se sucesso, navegar após 2 segundos
-    if (isSuccess && !isLoading) {
-      Future.delayed(Duration(seconds: 2), () {
-        if (mounted) {
-          Get.offAndToNamed('/principal');
-        }
-      });
-    }
-
-    if (!isSuccess && !isLoading) {
-      Future.delayed(Duration(seconds: 3), () {
-        if (mounted) {
-          Get.offAndToNamed('/principal');
-        }
-      });
-    }
-
     return WillPopScope(
       onWillPop: () async => false, // Desabilitar voltar durante o carregamento
       child: Material(

@@ -7,6 +7,7 @@ import 'package:lanchonete/Controller/Tef/paygo_tefcontroller.dart';
 import 'package:lanchonete/Controller/Tef/types/tef_provider.dart';
 import 'package:lanchonete/Models/venda_model.dart';
 import 'package:lanchonete/Models/cliente_model.dart';
+import 'package:lanchonete/Models/itens_model.dart';
 import 'package:lanchonete/Pages/Tela_carregamento_page.dart';
 import 'package:lanchonete/Pages/ReimpressaoCupom_page.dart';
 import 'package:intl/intl.dart';
@@ -22,7 +23,6 @@ import 'package:lanchonete/Pages/Principal_page.dart';
 import 'package:lanchonete/Services/ComandaService.dart'; // --- IMPORT ADICIONADO PARA FECHAR COMANDA ---
 
 import '../Services/CupomFiscalService.dart';
-import '../Services/PrinterService.dart';
 import '../Services/ClienteService.dart';
 
 class PaymentModePage extends StatefulWidget {
@@ -49,11 +49,13 @@ class _PaymentModePageState extends State<PaymentModePage> {
 
   bool _isParaLevar = false;
   bool _tefEmAndamento = false;
+  bool _finalizacaoEmAndamento = false;
 
   double get _totalPago => _pagamentos.fold(0, (sum, p) => sum + p.valor);
   double get _valorRestante =>
       (widget.valorPagamento - _totalPago).clamp(0, double.infinity);
-  bool get _podeFinalizar => _valorRestante <= 0.01;
+  bool get _podeFinalizar =>
+      _valorRestante <= 0.01 && !_finalizacaoEmAndamento;
   bool get _useTef => ConfigController.instance.useTef.value;
 
   String _formatPayment(double val) {
@@ -62,6 +64,11 @@ class _PaymentModePageState extends State<PaymentModePage> {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 700;
+    if (isMobile) {
+      return _buildMobileLayout();
+    }
+
     final orientation = MediaQuery.of(context).orientation;
     final isHorizontal = orientation == Orientation.landscape;
 
@@ -325,6 +332,229 @@ class _PaymentModePageState extends State<PaymentModePage> {
     );
   }
 
+  Widget _buildMobileLayout() {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Pagamento", style: TextStyle(fontSize: 18)),
+        centerTitle: true,
+        elevation: 0,
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              color: Colors.white,
+              child: Row(
+                children: [
+                  Expanded(
+                      child: _buildInfoCard(
+                          "Total", widget.valorPagamento, Colors.black87)),
+                  const SizedBox(width: 6),
+                  Expanded(
+                      child: _buildInfoCard(
+                          "Pago", _totalPago, Colors.green[700]!)),
+                  const SizedBox(width: 6),
+                  Expanded(
+                      child: _buildInfoCard(
+                          "Falta", _valorRestante, Colors.red[700]!)),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: Container(
+                color: const Color(0xFFF5F5F7),
+                padding: const EdgeInsets.all(8),
+                child: _buildPaymentOptionsGrid(true),
+              ),
+            ),
+            _buildMobileBottomPanel(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileBottomPanel() {
+    return Container(
+      height: _pagamentos.isEmpty ? 190 : 240,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: Colors.grey[300]!)),
+      ),
+      child: Column(
+        children: [
+          _buildMobileParaLevar(),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            color: Colors.grey[100],
+            width: double.infinity,
+            child: const Text("Lançamentos",
+                style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey,
+                    fontSize: 13)),
+          ),
+          Expanded(child: _buildLancamentosMobile()),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+            child: Row(
+              children: [
+                Expanded(
+                  child: SizedBox(
+                    height: 42,
+                    child: ElevatedButton(
+                      onPressed: _podeFinalizar ? _prepararFinalizacao : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green[600],
+                        disabledBackgroundColor: Colors.grey[300],
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                      ),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          _podeFinalizar
+                              ? "CONCLUIR"
+                              : "FALTA ${_formatPayment(_valorRestante)}",
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: _podeFinalizar
+                                  ? Colors.white
+                                  : Colors.grey[600]),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                TextButton(
+                  onPressed: navegarParaTelaAnterior,
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: const Size(0, 42),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text("Cancelar",
+                      style: TextStyle(color: Colors.red, fontSize: 13)),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMobileParaLevar() {
+    final color = _isParaLevar ? Colors.deepOrange : Colors.blue[800]!;
+    return Container(
+      margin: const EdgeInsets.all(8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: _isParaLevar ? Colors.orange[50] : Colors.blue[50],
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: _isParaLevar ? Colors.orange : Colors.blue,
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(_isParaLevar ? Icons.motorcycle : Icons.restaurant,
+              color: color, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _isParaLevar ? "PARA LEVAR" : "COMER NO LOCAL",
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  fontWeight: FontWeight.bold, color: color, fontSize: 12),
+            ),
+          ),
+          Switch(
+            value: _isParaLevar,
+            activeColor: Colors.deepOrange,
+            onChanged: (bool value) {
+              setState(() {
+                _isParaLevar = value;
+              });
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLancamentosMobile() {
+    if (_pagamentos.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.touch_app, size: 24, color: Colors.grey[300]),
+            const SizedBox(height: 6),
+            Text("Selecione o pagamento",
+                style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+          ],
+        ),
+      );
+    }
+
+    return ListView.separated(
+      itemCount: _pagamentos.length,
+      separatorBuilder: (context, index) => const Divider(height: 1),
+      itemBuilder: (context, index) {
+        final p = _pagamentos[index];
+        return ListTile(
+          dense: true,
+          visualDensity: const VisualDensity(vertical: -3),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+          leading: Icon(_getIconForType(p.tp), color: Colors.blue[700], size: 20),
+          title: Text(_getNomePagamento(p.tp),
+              style:
+                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          subtitle: p.tp == 1 && _clienteSelecionado != null
+              ? Text(_clienteSelecionado!.nome,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 11))
+              : null,
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _formatPayment(p.valor),
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: Colors.green),
+              ),
+              IconButton(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                icon: const Icon(Icons.remove_circle_outline,
+                    color: Colors.red, size: 20),
+                onPressed: () {
+                  setState(() {
+                    _pagamentos.removeAt(index);
+                    if (!_pagamentos.any((item) => item.tp == 1)) {
+                      _clienteSelecionado = null;
+                    }
+                  });
+                },
+              )
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildPaymentOptionsGrid(bool isHorizontal) {
     final options = [
       PaymentOptionTile(
@@ -371,15 +601,21 @@ class _PaymentModePageState extends State<PaymentModePage> {
       ),
     ];
 
-    return GridView.builder(
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 150,
-        childAspectRatio: 1.2,
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
-      ),
-      itemCount: options.length,
-      itemBuilder: (context, index) => options[index],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 520;
+
+        return GridView.builder(
+          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: isNarrow ? 180 : 160,
+            childAspectRatio: isNarrow ? 1.35 : 1.2,
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+          ),
+          itemCount: options.length,
+          itemBuilder: (context, index) => options[index],
+        );
+      },
     );
   }
 
@@ -819,6 +1055,11 @@ class _PaymentModePageState extends State<PaymentModePage> {
   }
 
   void _prepararFinalizacao() {
+    if (_finalizacaoEmAndamento) return;
+    setState(() {
+      _finalizacaoEmAndamento = true;
+    });
+
     String nomeCliente = 'CONSUMIDOR';
     int codCli = 1;
 
@@ -829,18 +1070,22 @@ class _PaymentModePageState extends State<PaymentModePage> {
 
     final comandaController =
         Provider.of<ComandaController>(context, listen: false);
+    final valorBruto = comandaController.itens.fold<double>(
+        0.0, (total, item) => total + comandaController.valorBrutoItem(item));
+    final totalDesconto = comandaController.itens
+        .fold<double>(0.0, (total, item) => total + (item.desconto ?? 0.0));
 
     final pedFatFinal = PedFat(
       codigo: 0,
       ficha: 0,
       cod_ped: 0,
-      desconto: 0,
+      desconto: totalDesconto,
       valor: comandaController.valorComanda,
       datac: DateTime.parse('1990-01-01'),
       valorpg: _totalPago,
       cliente: nomeCliente,
       tabela: 'VENDAS',
-      valorb: comandaController.valorComanda,
+      valorb: valorBruto,
       fun: 1,
       campo_datac: 'VEN_DATAC',
       fat: 0,
@@ -865,9 +1110,13 @@ class _PaymentModePageState extends State<PaymentModePage> {
       List<ItemVenda> itensVenda = comandaController.itens.map((item) {
         final valorUnitario = item.valor ?? 0.0;
         final quantidade = (item.quantidade ?? 1.0).toInt();
+        final valorBruto = valorUnitario * quantidade;
+        final desconto =
+            (item.desconto ?? 0.0).clamp(0.0, valorBruto).toDouble();
+        final valorLiquido = valorBruto - desconto;
         return ItemVenda(
           codigo: 0,
-          valor: valorUnitario * quantidade,
+          valor: valorLiquido,
           quantidade: quantidade,
           ven: 0,
           pro: item.produto ?? 0,
@@ -877,13 +1126,13 @@ class _PaymentModePageState extends State<PaymentModePage> {
           valorf: valorUnitario,
           diferenca: 0,
           liquido: 0,
-          valor2: valorUnitario * quantidade,
+          valor2: valorLiquido,
           valorcm: 0,
           aliquota: 0,
           gtin: "",
           embalagem: "PC",
-          valorb: valorUnitario * quantidade,
-          desconto: 0,
+          valorb: valorBruto,
+          desconto: desconto,
           valorc: valorUnitario * 0.7,
           obs: item.obs ?? "",
           gra: item.grade ?? 0,
@@ -920,21 +1169,30 @@ class _PaymentModePageState extends State<PaymentModePage> {
 
       Map<String, dynamic> vendaData = venda.toJson();
 
+      int? numeroPedidoFinalizado;
+      final itensParaFinalizar = List<Itens>.from(comandaController.itens);
+      final double totalParaFinalizar = comandaController.valorComanda;
+
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) {
+        MaterialPageRoute(builder: (loadingContext) {
           return TelaCarregamento(
-            messageAwait: 'Processando...',
-            messageSuccess: 'Venda Sucesso!',
-            messageError: 'Erro.',
+            messageAwait: 'Processando pagamento...',
+            messageSuccess: 'Venda realizada com sucesso!',
+            messageError: 'Erro ao processar venda.',
             finalization: true,
             onFinalization: () async {
-              final itens = comandaController.itens;
-              final valorComanda = comandaController.valorComanda;
               final success = await comandaController.inserirVenda(vendaData);
 
-              if (success['codigo'] != 0) {
-                // --- NOVA LÓGICA: FECHAR MESA E COMANDA NA API ---
+              final dynamic rawCod = success['codigo'] ??
+                  success['Codigo'] ??
+                  success['id'] ??
+                  success['VEN_CODIGO'];
+              final int codigoVenda =
+                  int.tryParse(rawCod?.toString() ?? '0') ?? 0;
+
+              if (codigoVenda > 0 || success.isNotEmpty) {
+                // --- BAIXA E ENCERRAMENTO DA MESA / COMANDA NA API ---
                 if (widget.mesaId != null) {
                   final cService = ComandaService();
                   try {
@@ -961,33 +1219,41 @@ class _PaymentModePageState extends State<PaymentModePage> {
                 }
                 // --------------------------------------------------
 
-                int numeroPedido =
-                    await OrderNumberService.generateNextOrderNumber();
-
-                await PrinterService.printOrder(
-                    itens: itens,
-                    orderNumber: numeroPedido,
-                    totalValue: valorComanda,
-                    isParaLevar: _isParaLevar);
-
-                if (mounted) {
-                  await Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(
-                        builder: (_) => ReimpressaoCupomPage(
-                            itens: itens,
-                            numeroPedido: numeroPedido,
-                            totalValue: valorComanda)),
-                    (route) => false,
-                  );
+                int numeroPedido = 1;
+                try {
+                  numeroPedido =
+                      await OrderNumberService.generateNextOrderNumber();
+                } catch (e) {
+                  print("Erro ao gerar número do pedido: $e");
                 }
+                numeroPedidoFinalizado = numeroPedido;
 
                 comandaController.clear();
+              } else {
+                throw Exception("Falha ao registrar venda no servidor.");
               }
+            },
+            onSuccess: (navContext) {
+              Navigator.of(navContext).pushAndRemoveUntil(
+                MaterialPageRoute(
+                  builder: (_) => ReimpressaoCupomPage(
+                    itens: itensParaFinalizar,
+                    numeroPedido: numeroPedidoFinalizado ?? 1,
+                    totalValue: totalParaFinalizar,
+                  ),
+                ),
+                (route) => false,
+              );
             },
           );
         }),
       );
     } catch (e) {
+      if (mounted) {
+        setState(() {
+          _finalizacaoEmAndamento = false;
+        });
+      }
       Fluttertoast.showToast(msg: "Erro: $e");
     }
   }

@@ -38,11 +38,19 @@ class _DespesaPageState extends State<DespesaPage> {
 
   @override
   Widget build(BuildContext context) {
+    final usuarioController = Provider.of<UsuarioController>(context);
+    if (!usuarioController.isAdmin) {
+      return const Center(
+        child: Text(
+          'Acesso restrito ao administrador.',
+          style: TextStyle(
+              fontSize: 16, fontWeight: FontWeight.bold, color: Colors.red),
+        ),
+      );
+    }
+
     final pdv = ConfigController.instance.pdv.value;
-    final funcionario =
-        Provider.of<UsuarioController>(context, listen: false)
-            .usuarioLogado
-            .codigo;
+    final funcionario = usuarioController.usuarioLogado.codigo;
 
     return SafeArea(
       child: Center(
@@ -53,7 +61,7 @@ class _DespesaPageState extends State<DespesaPage> {
             child: ListView(
               padding: const EdgeInsets.all(20),
               children: [
-                _cabecalho(pdv, funcionario),
+                _cabecalho(pdv, funcionario > 0 ? funcionario : 1),
                 const SizedBox(height: 20),
                 _campoSubDespesa(),
                 const SizedBox(height: 12),
@@ -275,7 +283,6 @@ class _DespesaPageState extends State<DespesaPage> {
       return;
     }
 
-    final usuario = Provider.of<UsuarioController>(context, listen: false);
     final despesa = DespesaLancamento(
       subDespesa: _subDespesa!.codigo,
       subDespesaNome: _subDespesa!.nome,
@@ -283,7 +290,7 @@ class _DespesaPageState extends State<DespesaPage> {
       data: _data,
       documento: _documentoController.text.trim(),
       historico: _historicoController.text.trim(),
-      funcionario: usuario.usuarioLogado.codigo,
+      funcionario: 1,
       pdv: ConfigController.instance.pdv.value,
       conta: int.tryParse(_contaController.text.trim()) ?? 0,
     );

@@ -5,10 +5,13 @@ import 'package:lanchonete/Pages/Categoria_page.dart';
 import 'package:lanchonete/Pages/Config_page.dart';
 import 'package:lanchonete/Pages/Consulta_Produtos_page.dart';
 import 'package:lanchonete/Pages/Despesa_page.dart';
+import 'package:lanchonete/Pages/Fluxo_Caixa_page.dart';
 import 'package:lanchonete/Pages/PrintersConfigPage.dart';
 import 'package:lanchonete/Pages/Mesas_page.dart';
 import 'package:lanchonete/Pages/RelatorioVendasAnalitico_page.dart';
 import 'package:lanchonete/Services/CaixaService.dart';
+import 'package:lanchonete/Controller/usuario_controller.dart';
+import 'package:provider/provider.dart';
 import 'package:flutter/material.dart';
 
 enum Paginas {
@@ -19,7 +22,8 @@ enum Paginas {
   despesas,
   relatorios,
   configuracao,
-  impressoras
+  impressoras,
+  fluxoCaixa
 }
 
 class PrincipalPage extends StatefulWidget {
@@ -55,6 +59,16 @@ class _PrincipalPageState extends State<PrincipalPage> {
         _selectedIndex == Paginas.categorias.index &&
         _mesaSelecionada == null) {
       _selectedIndex = Paginas.mesas.index;
+    }
+
+    final usuarioController =
+        Provider.of<UsuarioController>(context, listen: false);
+    if (!usuarioController.isAdmin) {
+      if (_selectedIndex == Paginas.despesas.index ||
+          _selectedIndex == Paginas.fluxoCaixa.index) {
+        _selectedIndex =
+            _useTables ? Paginas.mesas.index : Paginas.categorias.index;
+      }
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -129,6 +143,12 @@ class _PrincipalPageState extends State<PrincipalPage> {
 
   @override
   Widget build(BuildContext context) {
+    final usuarioController = Provider.of<UsuarioController>(context);
+    final bool isAdmin = usuarioController.isAdmin;
+    final String nomeUsuario = usuarioController.usuarioLogado.login.isNotEmpty
+        ? usuarioController.usuarioLogado.login
+        : "Operador do Caixa";
+
     final List<Widget> _paginas = <Widget>[
       MesasPage(
         onOpenDrawer: _openDrawer,
@@ -157,7 +177,8 @@ class _PrincipalPageState extends State<PrincipalPage> {
       const DespesaPage(),
       RelatorioVendasAnaliticoPage(),
       ConfigPage(),
-      PrinterConfigPage()
+      PrinterConfigPage(),
+      FluxoCaixaPage(),
     ];
 
     bool isCustomAppBarPage = _selectedIndex == Paginas.categorias.index ||
@@ -193,7 +214,7 @@ class _PrincipalPageState extends State<PrincipalPage> {
                 "PDV Lanchonete",
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
               ),
-              accountEmail: const Text("Operador do Caixa"),
+              accountEmail: Text(nomeUsuario),
             ),
             Expanded(
               child: ListView(
@@ -236,18 +257,26 @@ class _PrincipalPageState extends State<PrincipalPage> {
                     isSelected: _selectedIndex == Paginas.caixa.index,
                     onTap: () => _onItemTapped(Paginas.caixa.index),
                   ),
-                  _buildDrawerItem(
-                    icon: Icons.payments_outlined,
-                    text: 'Lancar Despesa',
-                    isSelected: _selectedIndex == Paginas.despesas.index,
-                    onTap: () => _onItemTapped(Paginas.despesas.index),
-                  ),
+                  if (isAdmin)
+                    _buildDrawerItem(
+                      icon: Icons.payments_outlined,
+                      text: 'Lancar Despesa',
+                      isSelected: _selectedIndex == Paginas.despesas.index,
+                      onTap: () => _onItemTapped(Paginas.despesas.index),
+                    ),
                   _buildDrawerItem(
                     icon: Icons.assessment_rounded,
                     text: 'Vendas Analitico',
                     isSelected: _selectedIndex == Paginas.relatorios.index,
                     onTap: () => _onItemTapped(Paginas.relatorios.index),
                   ),
+                  if (isAdmin)
+                    _buildDrawerItem(
+                      icon: Icons.money_outlined,
+                      text: 'Fluxo Caixa',
+                      isSelected: _selectedIndex == Paginas.fluxoCaixa.index,
+                      onTap: () => _onItemTapped(Paginas.fluxoCaixa.index),
+                    ),
                   const Divider(),
                   _buildDrawerItem(
                     icon: Icons.settings_rounded,
@@ -308,7 +337,8 @@ class _PrincipalPageState extends State<PrincipalPage> {
     'Lancar Despesa',
     'Vendas Analitico',
     'Configuracoes',
-    'Impressoras'
+    'Impressoras',
+    'Fluxo Caixa'
   ];
 
   Widget _buildDrawerItem({
@@ -342,6 +372,24 @@ class _PrincipalPageState extends State<PrincipalPage> {
   }
 
   void _onItemTapped(int index) {
+    final usuarioController =
+        Provider.of<UsuarioController>(context, listen: false);
+    if (!usuarioController.isAdmin) {
+      if (index == Paginas.despesas.index ||
+          index == Paginas.fluxoCaixa.index) {
+        if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
+          Navigator.pop(context);
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Acesso restrito ao administrador.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+    }
+
     setState(() {
       _selectedIndex = index;
     });

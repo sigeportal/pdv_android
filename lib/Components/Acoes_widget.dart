@@ -23,6 +23,11 @@ class AcoesWidget extends StatefulWidget {
 class _AcoesWidgetState extends State<AcoesWidget> {
   String _observacao = '';
 
+  double? _parseValor(String valor) {
+    final texto = valor.trim().replaceAll('.', '').replaceAll(',', '.');
+    return double.tryParse(texto);
+  }
+
   Future<Widget?> _telaObservacao(
       ComandaController comandaController, Itens item) async {
     return await showDialog(
@@ -73,6 +78,53 @@ class _AcoesWidgetState extends State<AcoesWidget> {
     );
   }
 
+  Future<void> _telaDesconto(
+      ComandaController comandaController, Itens item) async {
+    final controller = TextEditingController(
+      text: (item.desconto ?? 0).toStringAsFixed(2).replaceAll('.', ','),
+    );
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Desconto do item'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(
+            labelText: 'Valor do desconto',
+            prefixText: 'R\$ ',
+            border: OutlineInputBorder(),
+          ),
+          onSubmitted: (_) {
+            final desconto = _parseValor(controller.text);
+            if (desconto != null && desconto >= 0) {
+              comandaController.alteraDescontoItem(item.codigo, desconto);
+              Navigator.pop(context);
+            }
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final desconto = _parseValor(controller.text);
+              if (desconto != null && desconto >= 0) {
+                comandaController.alteraDescontoItem(item.codigo, desconto);
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Salvar'),
+          ),
+        ],
+      ),
+    );
+  }
+
   _buildAcoes(Itens item, ComandaController comandaController) {
     return Row(children: [
       IconButton(
@@ -82,6 +134,20 @@ class _AcoesWidgetState extends State<AcoesWidget> {
         color: Colors.green,
         icon: Icon(
           Icons.edit,
+          size: 24,
+          color: item.quantidade! > 0 ? Colors.black : Colors.grey,
+        ),
+      ),
+      SizedBox(
+        height: 20,
+      ),
+      IconButton(
+        onPressed: () {
+          _telaDesconto(comandaController, item);
+        },
+        color: Colors.orange,
+        icon: Icon(
+          Icons.discount,
           size: 24,
           color: item.quantidade! > 0 ? Colors.black : Colors.grey,
         ),

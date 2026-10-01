@@ -10,6 +10,9 @@ class RelatorioService {
     int cliente = 0,
     int grupo = 0,
     String tipoPedido = '',
+    int pdv = 0,
+    bool todosCaixas = false,
+    int caixa = 0,
   }) async {
     final url = await ConfigController.instance.getUrlBase();
     final dio = Dio(BaseOptions(
@@ -27,6 +30,9 @@ class RelatorioService {
         if (cliente > 0) 'cliente': cliente,
         if (grupo > 0) 'grupo': grupo,
         if (tipoPedido.isNotEmpty) 'tipoPedido': tipoPedido,
+        if (pdv > 0) 'pdv': pdv,
+        if (todosCaixas) 'todosCaixas': 'true',
+        if (caixa > 0) 'caixa': caixa,
       },
     );
 

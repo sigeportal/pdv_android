@@ -26,43 +26,102 @@ class ProdutoItem extends StatefulWidget {
 class _ProdutoItemState extends State<ProdutoItem> {
   final f = NumberFormat("##0.00", "pt_BR");
 
+  double? _parseValor(String valor) {
+    final texto = valor.trim().replaceAll('.', '').replaceAll(',', '.');
+    return double.tryParse(texto);
+  }
+
+  Future<double?> _solicitarPrecoGenerico() async {
+    final controller = TextEditingController();
+    return showDialog<double>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Preço de venda'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(
+              labelText: 'Valor',
+              prefixText: 'R\$ ',
+              border: OutlineInputBorder(),
+            ),
+            onSubmitted: (_) {
+              final valor = _parseValor(controller.text);
+              if (valor != null && valor > 0) {
+                Navigator.pop(context, valor);
+              }
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final valor = _parseValor(controller.text);
+                if (valor != null && valor > 0) {
+                  Navigator.pop(context, valor);
+                }
+              },
+              child: const Text('Confirmar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final comandaController = Provider.of<ComandaController>(context);
     final usuarioController =
         Provider.of<UsuarioController>(context, listen: false);
-
     // Verifica quantos deste item já estão no carrinho para mostrar um badge
     var quantidade = comandaController.getQuantidade(widget.produto!.codigo);
 
-    return Container(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isCompact = constraints.maxWidth < 170;
+        final radius = isCompact ? 10.0 : 16.0;
+
+        return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(radius),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.08),
             spreadRadius: 1,
-            blurRadius: 8,
+            blurRadius: isCompact ? 4 : 8,
             offset: const Offset(0, 2),
           ),
         ],
       ),
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(radius),
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(radius),
           onTap: () async {
             // Lógica unificada de clique no card
             if (widget.produto!.grade > 0) {
               // Se houver grade, abrir widget de grade
               _buildGradeProduto(widget.produto!);
             } else {
+              double? valorVenda;
+              if (widget.produto!.codigo == 1) {
+                valorVenda = await _solicitarPrecoGenerico();
+                if (valorVenda == null) return;
+              }
+
               // Senão, adicionar diretamente
               comandaController.adicionaItem(
                 widget.produto!,
                 '',
+                valorVenda: valorVenda,
                 usuario: usuarioController.usuarioLogado.codigo,
               );
             }
@@ -72,20 +131,20 @@ class _ProdutoItemState extends State<ProdutoItem> {
             children: [
               // 1. ÁREA DA IMAGEM
               Expanded(
-                flex: 40, // Aumentei um pouco a área da imagem
+                flex: isCompact ? 34 : 40, // Aumentei um pouco a área da imagem
                 child: Container(
                   decoration: BoxDecoration(
                     color: Colors.grey[100],
                     borderRadius:
-                        const BorderRadius.vertical(top: Radius.circular(16)),
+                        BorderRadius.vertical(top: Radius.circular(radius)),
                   ),
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
                       // A Imagem
                       ClipRRect(
-                        borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(16)),
+                        borderRadius:
+                            BorderRadius.vertical(top: Radius.circular(radius)),
                         child: FittedBox(
                           fit: BoxFit.cover,
                           child: ImagemProdutoWidget(
@@ -133,10 +192,10 @@ class _ProdutoItemState extends State<ProdutoItem> {
                             child: Center(
                               child: Text(
                                 quantidade.toStringAsFixed(0),
-                                style: const TextStyle(
+                                style: TextStyle(
                                     color: Colors.white,
                                     fontWeight: FontWeight.bold,
-                                    fontSize: 14),
+                                    fontSize: isCompact ? 12 : 14),
                               ),
                             ),
                           ),
@@ -148,9 +207,9 @@ class _ProdutoItemState extends State<ProdutoItem> {
 
               // 2. ÁREA DE INFORMAÇÕES
               Expanded(
-                flex: 40,
+                flex: isCompact ? 46 : 40,
                 child: Padding(
-                  padding: const EdgeInsets.all(12.0),
+                  padding: EdgeInsets.all(isCompact ? 8.0 : 12.0),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -159,9 +218,9 @@ class _ProdutoItemState extends State<ProdutoItem> {
                         widget.produto!.nome,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          fontSize: 15,
+                          fontSize: isCompact ? 13 : 15,
                           color: Colors.black87,
                           height: 1.1,
                         ),
@@ -170,7 +229,7 @@ class _ProdutoItemState extends State<ProdutoItem> {
                       Text(
                         'R\$ ${f.format(widget.produto!.valor)}',
                         style: TextStyle(
-                          fontSize: 18,
+                          fontSize: isCompact ? 15 : 18,
                           fontWeight: FontWeight.w900,
                           color: Colors.green[700],
                         ),
@@ -183,6 +242,8 @@ class _ProdutoItemState extends State<ProdutoItem> {
           ),
         ),
       ),
+    );
+      },
     );
   }
 

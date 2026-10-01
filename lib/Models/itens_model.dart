@@ -6,6 +6,7 @@ class Itens {
   int? codigo;
   int? produto;
   double? valor;
+  double? desconto;
   double? quantidade;
   String? estado;
   String? obs;
@@ -25,6 +26,7 @@ class Itens {
       {this.id,
       this.produto,
       this.valor,
+      this.desconto,
       this.quantidade,
       this.estado,
       this.obs,
@@ -37,14 +39,16 @@ class Itens {
       this.gradeProduto,
       this.usuario,
       this.idAgrupamento,
-      this.isBebida,
-      this.isPastel}) {
+      this.isBebida = false,
+      this.isPastel = false}) {
     if (this.complementos == null) {
       this.complementos = <Complementos>[];
     }
     if (this.opcoesNiveis == null) {
       this.opcoesNiveis = <OpcaoNivel>[];
     }
+    this.isBebida ??= false;
+    this.isPastel ??= false;
   }
 
   factory Itens.fromJson(Map<String, dynamic> json) {
@@ -99,15 +103,32 @@ class Itens {
       }
     }
 
+    final String nomeItem = json['nome']?.toString() ??
+        json['pro_nome']?.toString() ??
+        json['PRO_NOME']?.toString() ??
+        '';
+    final String nomeUpper = nomeItem.toUpperCase();
+    final bool parsedIsBebida = json['isBebida'] == true ||
+        nomeUpper.contains('BEBIDA') ||
+        nomeUpper.contains('REFRIGERANTE') ||
+        nomeUpper.contains('SUCO') ||
+        nomeUpper.contains('CERVEJA') ||
+        nomeUpper.contains('AGUA') ||
+        nomeUpper.contains('ÁGUA');
+    final bool parsedIsPastel = json['isPastel'] == true ||
+        nomeUpper.contains('PASTEL') ||
+        nomeUpper.contains('PAST');
+
     return Itens(
       codigo: parseIntSafe(json['cpCodigo']),
       produto: parseIntSafe(json['cpPro']),
       estado: json['cpEstado']?.toString() ?? '',
       valor: parseDoubleSafe(json['cpValor']),
+      desconto: parseDoubleSafe(json['cpDesconto'] ?? json['desconto']),
       quantidade: parseDoubleSafe(json['cpQuantidade']),
       obs: json['cpObs']?.toString() ?? '',
       grade: parseIntSafe(json['cpGra']),
-      nome: json['nome']?.toString() ?? '',
+      nome: nomeItem,
       gradeProduto: (json['gradeProduto'] != null &&
               json['gradeProduto'] is Map &&
               json['gradeProduto'].isNotEmpty)
@@ -117,6 +138,8 @@ class Itens {
       opcoesNiveis: listaOpcoes,
       usuario: parseIntSafe(json['usuario']),
       idAgrupamento: json['idAgrupamento']?.toString() ?? '',
+      isBebida: parsedIsBebida,
+      isPastel: parsedIsPastel,
     );
   }
 
@@ -126,6 +149,7 @@ class Itens {
       "produto": produto ?? 0,
       "estado": estado ?? '',
       "valor": valor ?? 0.0,
+      "desconto": desconto ?? 0.0,
       "quantidade": quantidade ?? 0.0,
       "obs": obs ?? '',
       "grade": grade ?? 0,

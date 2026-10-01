@@ -5,11 +5,22 @@ import '../repositories/usuario_repository.dart';
 
 class UsuarioController extends ChangeNotifier {
   final repository = UsuarioRepository();
-  late UsuarioModel usuarioLogado;
+  UsuarioModel? _usuarioLogado;
+
+  UsuarioModel get usuarioLogado =>
+      _usuarioLogado ?? UsuarioModel(codigo: 0, login: '');
+
+  set usuarioLogado(UsuarioModel value) {
+    _usuarioLogado = value;
+    notifyListeners();
+  }
+
+  bool get isAdmin => _usuarioLogado?.isAdmin ?? false;
 
   Future<bool> logar(String login, String senha) async {
     try {
-      usuarioLogado = await repository.fetchLogin(login, senha);
+      final user = await repository.fetchLogin(login, senha);
+      usuarioLogado = user;
       return true;
     } catch (e) {
       throw Exception(e);
